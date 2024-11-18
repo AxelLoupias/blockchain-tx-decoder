@@ -1,8 +1,9 @@
 {
   "name": "blockchain-tx-decoder",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Utility for decoding Ethereum transactions using ethers.js. Extracts detailed transaction data, decodes contract calls and constructor parameters, parses emitted events, and provides insights into transaction failures.",
   "main": "dist/index.js",
+	"types": "dist/index.d.ts",
   "files": [
     "dist",
     "src",
