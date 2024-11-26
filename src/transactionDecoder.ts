@@ -3,8 +3,8 @@ import {
   type TransactionReceipt,
   type TransactionResponse,
   type CallExceptionError,
-  type Result,
   type Interface,
+  Result,
   ethers,
   hexlify,
 } from 'ethers'
@@ -38,9 +38,6 @@ export class TransactionDecoder {
       throw new InvalidTxHash(txHash)
     }
     const transaction = await receipt.getTransaction()
-    // if (!transaction.to) {
-    //   throw new ConstructorTransaction()
-    // }
     const transactionData = await this.getTransactionData(receipt, transaction)
     const { decodedTransaction, contractInterface } =
       await this.getTransactionDescription(transaction)
@@ -49,11 +46,7 @@ export class TransactionDecoder {
       decodedTransaction,
       contractInterface,
     )
-    const revertData = await this.getRevertData(
-      receipt,
-      transaction,
-      contractInterface,
-    )
+    const revertData = await this.getRevertData(receipt, transaction)
     return {
       transactionData,
       contractData,
@@ -154,15 +147,18 @@ export class TransactionDecoder {
   private async getRevertData(
     receipt: TransactionReceipt,
     transaction: TransactionResponse,
-    contractInterface: Interface,
   ): Promise<RevertData | undefined> {
     if (receipt.status === 1) {
       return undefined
     }
-    const errorDescription = await this.getErrorDescription(
-      transaction,
-      contractInterface,
-    )
+    const errorDescription = await this.getErrorDescription(transaction)
+
+    if (!errorDescription) {
+      console.error(
+        'Failed to decode the error with any provided ABI interface.',
+      )
+      return undefined
+    }
     return {
       name: errorDescription.name,
       selector: errorDescription?.selector,
@@ -170,10 +166,7 @@ export class TransactionDecoder {
     }
   }
 
-  private async getErrorDescription(
-    transaction: TransactionResponse,
-    contractInterface: Interface,
-  ) {
+  private async getErrorDescription(transaction: TransactionResponse) {
     let revertError
     const txRequest = {
       to: transaction.to,
@@ -187,9 +180,24 @@ export class TransactionDecoder {
       await this.provider.call(txRequest)
     } catch (error: any) {
       const callExceptionError = error as CallExceptionError
-      revertError = callExceptionError.data
+      revertError = callExceptionError?.data
     }
-    return contractInterface.parseError(revertError!)!
+    if (revertError == '0x') {
+      return {
+        name: 'Error: Transaction reverted without a reason',
+        selector: '0x',
+        args: new Result(),
+      }
+    }
+    let decoded
+    for (const contractInfo of this.contractInfo) {
+      const interfaceContract = new ethers.Interface(contractInfo.abi)
+      decoded = interfaceContract.parseError(revertError!)
+      if (decoded) {
+        return decoded
+      }
+    }
+    return null
   }
 
   private resultToObject(input: Result): { [key: string]: unknown }[] {
